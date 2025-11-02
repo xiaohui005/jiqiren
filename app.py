@@ -1,15 +1,40 @@
-# app.py
+# app.py（安全版：防导入错误）
 import streamlit as st
-import plotly.graph_objects as go
-from data_all import get_all_stocks
-from data_fetcher import fetch_stock_data
-from analyzer import calculate_moving_average, calculate_rsi, plot_candlestick, select_top_stocks
-from news_fetcher import get_stock_news
+
+# 安全导入（加异常处理）
+try:
+    import plotly.graph_objects as go
+    PLOTLY_AVAILABLE = True
+except ImportError as e:
+    st.error(f"Plotly 导入失败: {e}. 请运行 'pip install plotly'")
+    PLOTLY_AVAILABLE = False
+
+try:
+    import pandas as pd
+    import numpy as np
+    PANDAS_AVAILABLE = True
+except ImportError:
+    st.error("Pandas 导入失败. 请运行 'pip install pandas'")
+    PANDAS_AVAILABLE = False
+    pd = None
+
+try:
+    from data_all import get_all_stocks
+    from data_fetcher import fetch_stock_data
+    from analyzer import calculate_moving_average, calculate_rsi, plot_candlestick, select_top_stocks
+    from news_fetcher import get_stock_news
+    MODULES_AVAILABLE = True
+except ImportError as e:
+    st.error(f"模块导入失败: {e}. 请检查文件是否存在，并运行 'pip install -r requirements.txt'")
+    MODULES_AVAILABLE = False
 
 st.set_page_config(page_title="智能A股选股系统", layout="wide")
 
 st.title("智能A股选股系统")
 st.caption("技术分析 + 实时新闻 + 自动推荐 | 数据每5分钟更新")
+
+if not MODULES_AVAILABLE or not PANDAS_AVAILABLE or not PLOTLY_AVAILABLE:
+    st.stop()  # 停止运行，显示错误
 
 # 左侧：全市场 + 推荐
 col1, col2 = st.columns([1, 1])
@@ -17,7 +42,7 @@ col1, col2 = st.columns([1, 1])
 with col1:
     st.subheader("潜力股推荐（今日Top5）")
     df_all = get_all_stocks()
-    if not df_all.empty:
+    if not df_all.empty and PANDAS_AVAILABLE:
         top_stocks = select_top_stocks(df_all, top_n=5)
         st.dataframe(top_stocks.style.format({
             '现价': '{:.2f}',
@@ -27,7 +52,6 @@ with col1:
             '市盈率': '{:.2f}'
         }), use_container_width=True)
         
-        # 选股理由
         st.info("""
         **选股逻辑**：  
         - 价格 > 20日均线  
@@ -37,7 +61,7 @@ with col1:
         - 涨跌幅 + 换手率 加权打分
         """)
     else:
-        st.warning("暂无数据")
+        st.warning("暂无数据，请检查网络或依赖")
 
 with col2:
     st.subheader("个股深度分析")
@@ -50,9 +74,12 @@ with col2:
                 data = calculate_moving_average(data)
                 data = calculate_rsi(data)
                 
-                # K线图
-                fig = plot_candlestick(data, f"{code} {data.index[-1].strftime('%Y-%m-%d')}")
-                st.plotly_chart(fig, use_container_width=True)
+                # K线图（安全渲染）
+                if PLOTLY_AVAILABLE:
+                    fig = plot_candlestick(data, f"{code}")
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.line_chart(data['Close'])  # Fallback: 简单线图
                 
                 # 最新指标
                 latest = data.iloc[-1]
